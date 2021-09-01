@@ -1,3 +1,11 @@
+define Build/MerakiNAND
+	-$(STAGING_DIR_HOST)/bin/mkmerakifw \
+		-B $(BOARD_NAME) -s \
+		-i $@ \
+		-o $@.new
+	@cp $@.new $@
+endef
+
 # attention: only zlib compression is allowed for the boot fs
 define Build/zyxel-buildkerneljffs
 	rm -rf  $(KDIR_TMP)/zyxelnbg6716
@@ -149,6 +157,22 @@ define Device/glinet_gl-e750
   IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata
 endef
 TARGET_DEVICES += glinet_gl-e750
+
+define Device/meraki_mr18
+  SOC := qca9558
+  BOARD_NAME := mr18
+  DEVICE_TITLE := Meraki MR18
+  DEVICE_PACKAGES := kmod-spi-gpio kmod-ath9k
+  BOARDNAME := MR18
+  BLOCKSIZE := 64k
+  MTDPARTS := ar934x-nfc:512k(nandloader)ro,8M(kernel),8M(recovery),113664k(ubi),128k@130944k(odm-caldata)ro
+  CMDLINE := board=$$(BOARDNAME) mtdparts=$$(MTDPARTS)
+  IMAGES := sysupgrade.tar
+  KERNEL := kernel-bin | patch-cmdline | append-dtb | MerakiNAND
+  KERNEL_INITRAMFS := append-kernel | patch-cmdline | append-dtb | MerakiNAND
+  IMAGE/sysupgrade.tar := sysupgrade-tar
+endef
+TARGET_DEVICES += meraki_mr18
 
 # fake rootfs is mandatory, pad-offset 129 equals (2 * uimage_header + 0xff)
 define Device/netgear_ath79_nand

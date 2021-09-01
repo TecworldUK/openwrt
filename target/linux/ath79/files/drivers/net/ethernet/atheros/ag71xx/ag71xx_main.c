@@ -577,6 +577,58 @@ static void ag71xx_bit_clear(void __iomem *reg, u32 bit)
 	__raw_readl(reg);
 }
 
+static void ag71xx_sgmii_serdes_init_qca955x(struct device_node *np)
+{
+	struct device_node *np_dev;
+	void __iomem *gmac_base;
+	u32 serdes_cal;
+	u32 t;
+
+	np = of_get_child_by_name(np, "gmac-config");
+	if (!np)
+		return;
+
+	if (of_property_read_u32(np, "serdes-cal", &serdes_cal))
+		/* By default, use middle value for resistor calibration */
+		serdes_cal = 0x7;
+
+	np_dev = of_parse_phandle(np, "device", 0);
+	if (!np_dev)
+		goto out;
+
+	gmac_base = of_iomap(np_dev, 0);
+	if (!gmac_base) {
+		pr_err("%pOF: can't map GMAC registers\n", np_dev);
+		goto err_iomap;
+	}
+
+	pr_info("%pOF: fixup SERDES calibration to value %i\n",
+		np_dev, serdes_cal);
+	t = __raw_readl(gmac_base + QCA955X_GMAC_REG_SGMII_SERDES);
+	t &= ~(QCA955X_SGMII_SERDES_RES_CALIBRATION_MASK
+			<< QCA955X_SGMII_SERDES_RES_CALIBRATION_SHIFT);
+	t |= (serdes_cal & QCA955X_SGMII_SERDES_RES_CALIBRATION_MASK)
+			<< QCA955X_SGMII_SERDES_RES_CALIBRATION_SHIFT;
+	__raw_writel(t, gmac_base + QCA955X_GMAC_REG_SGMII_SERDES);
+
+	ath79_pll_wr(QCA955X_PLL_ETH_SGMII_SERDES_REG,
+			QCA955X_PLL_ETH_SGMII_SERDES_LOCK_DETECT
+					| QCA955X_PLL_ETH_SGMII_SERDES_PLL_REFCLK
+					| QCA955X_PLL_ETH_SGMII_SERDES_EN_PLL);
+
+	ath79_device_reset_clear(QCA955X_RESET_SGMII_ANALOG);
+	ath79_device_reset_clear(QCA955X_RESET_SGMII);
+
+	while (!(__raw_readl(gmac_base + QCA955X_GMAC_REG_SGMII_SERDES)
+			& QCA955X_SGMII_SERDES_LOCK_DETECT_STATUS));
+
+	iounmap(gmac_base);
+err_iomap:
+	of_node_put(np_dev);
+out:
+	of_node_put(np);
+}
+
 static void ag71xx_sgmii_serdes_init_qca956x(struct device_node *np)
 {
 	struct device_node *np_dev;
@@ -1529,6 +1581,10 @@ static int ag71xx_probe(struct platform_device *pdev)
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!res)
 		return -EINVAL;
+	if (of_property_read_bool(np, "qca955x-serdes-fixup")) {
+		ag71xx_sgmii_serdes_init_qca955x(np);
+		ag71xx_sgmii_init_qca955x(np);
+	}
 
 	if (of_property_read_bool(np, "qca956x-serdes-fixup")) {
 		ag71xx_sgmii_serdes_init_qca956x(np);

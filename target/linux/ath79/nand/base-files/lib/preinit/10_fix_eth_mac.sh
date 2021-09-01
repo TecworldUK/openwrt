@@ -8,6 +8,10 @@ preinit_set_mac_address() {
 		ip link set dev eth0 address $(macaddr_add $ethaddr 2)
 		ip link set dev eth1 address $(macaddr_add $ethaddr 3)
 		;;
+	meraki,mr18)
+		ethaddr=$(mtd_get_mac_binary_ubi board-config 102)
+		[ -n "$ethaddr" ] && ip link set dev eth0 address $(macaddr_add $ethaddr)
+		;;
 	esac
 }
 
